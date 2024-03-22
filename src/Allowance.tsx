@@ -14,17 +14,27 @@ function Allowance() {
     const [isRunning, setIsRunning] = useState(false);
     const [spenderAddress, setSpenderAddress] = useState('');
     const [amount, setAmount] = useState(0);
+    const [balance, setBalance] = useState('');
+    const [tokenInfo, setTokenInfo] = useState({});
 
-    const fetchAllowance = useCallback(async () => {
+    const fetchToken = useCallback(async () => {
         if (!accounts.length || !contractAddress) return;
         const senderAddress = accounts[0].address;
 
-        const response = await queryClient?.queryContractSmart(contractAddress, {
+        const balance = (await queryClient?.queryContractSmart(contractAddress, {
+            balance: {
+                "address": senderAddress
+            },
+        }))?.balance;
+        const tokenInfo = (await queryClient?.queryContractSmart(contractAddress, {
+            token_info: {},
+        }));
+        const allowances = (await queryClient?.queryContractSmart(contractAddress, {
             all_allowances: {
                 "owner": senderAddress
-            }
-        });
-        return response?.allowances;
+            },
+        }))?.allowances;
+        return { balance, tokenInfo, allowances };
     }, [queryClient, accounts, contractAddress]);
 
     const revoke = async (allowance: any) => {
@@ -105,11 +115,13 @@ function Allowance() {
     }
 
     useEffect(() => {
-        fetchAllowance().then((allowances: Array<any>) => {
-            console.log(allowances);
-            setAllowances(allowances);
+        fetchToken().then((token) => {
+            setBalance(token?.balance);
+            setAllowances(token?.allowances);
+            setTokenInfo(token?.tokenInfo);
+            console.log(token);
         })
-    }, [connectedWallet, fetchAllowance]);
+    }, [connectedWallet, fetchToken]);
 
     if (!connectedWallet) return <WalletConnectButton />;
 
@@ -118,6 +130,8 @@ function Allowance() {
             <div>
                 Contract Address: 
                 <input value={contractAddress} onChange={(e) => { setContractAddress(e.target.value) }} />                
+                <div>Balance: {balance}</div>
+                {tokenInfo && <div>Token Info- decimals: {tokenInfo?.decimals} name: {tokenInfo?.name} symbol: {tokenInfo?.symbol}</div>}
             </div>
             <div>
                 Spender: <input value={spenderAddress} onChange={(e) => setSpenderAddress(e.target.value)} />
