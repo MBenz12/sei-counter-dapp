@@ -20,6 +20,58 @@ function Allowance() {
     const [tokenInfo, setTokenInfo] = useState<any>({});
     const [approvals, setApprovals] = useState<Array<Array<any>>>([]);
     const [tokens, setTokens] = useState<Array<any>>([]);
+    const [contracts, setContracts] = useState<{ [key: string]: string }>({});
+
+    const fetchContracts = useCallback(async () => {
+        if (!accounts.length) return;
+        const senderAddress = accounts[0].address;
+
+        try {
+            // console.log(await queryClient?.getTx("F5B180555C09FE8A1D4B787959D3E2A48F8EAA22C4DCD677A9AB72A0F51F37AE"));
+            const [ftTxs, nftTxs] = (await Promise.all([
+                queryClient?.searchTx({
+                    tags: [
+                        {
+                            key: "wasm.action",
+                            value: "increase_allowance",
+                        },
+                        {
+                            key: "wasm.owner",
+                            value: senderAddress,
+                        }
+                    ]
+                }),
+                queryClient?.searchTx({
+                    tags: [
+                        {
+                            key: "wasm.action",
+                            value: "approve",
+                        },
+                        {
+                            key: "wasm.sender",
+                            value: senderAddress,
+                        }
+                    ]
+                })
+            ]));
+
+            const txs = (ftTxs || []).concat(nftTxs || []);
+
+            const contracts: { [key: string]: string } = {};
+            txs?.forEach((tx) => {
+                tx.events.forEach(event => {
+                    if (event.type === "wasm") {
+                        contracts[event.attributes[0].value] = event.attributes[1].value === "increase_allowance" ? "FT" : "NFT";
+                    }
+                });
+            });
+
+            setContracts(contracts);
+            // console.log(contracts);
+        } catch (error) {
+            console.log(error);
+        }
+    }, [queryClient, accounts]);
 
     const fetchToken = useCallback(async () => {
         if (!accounts.length || !contractAddress) return;
@@ -66,7 +118,7 @@ function Allowance() {
             setAllowances(allowances?.allowances);
             setTokenInfo(tokenInfo);
         }
-    }, [queryClient, accounts, contractAddress]);
+    }, [queryClient, accounts, contractAddress, isNFT]);
 
     const revokeFT = async (allowance: any) => {
         if (!accounts.length) return;
@@ -218,6 +270,10 @@ function Allowance() {
     }, [connectedWallet, fetchToken]);
 
     useEffect(() => {
+        fetchContracts();
+    }, [connectedWallet, fetchContracts]);
+
+    useEffect(() => {
         setContractAddress(isNFT ? NFT_CONTRACT_ADDRESS : FT_CONTRACT_ADDRESS);
     }, [isNFT]);
 
@@ -226,6 +282,14 @@ function Allowance() {
     return (
         <div>
             <div>
+                {Object.keys(contracts).length && <select value={contractAddress} onChange={(e) => {
+                    setContractAddress(e.target.value);
+                    setIsNFT(contracts[e.target.value] === "NFT");
+                }}>
+                    {Object.keys(contracts).map((address => (
+                        <option key={address} value={address}>{address} - {contracts[address]}</option>
+                    )))}
+                </select>}
                 <h2>Select Token Type:</h2>
                 <div>
                     <label>
